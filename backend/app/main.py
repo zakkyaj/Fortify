@@ -4,6 +4,7 @@ FORTIFY Backend — main application entry point.
 import logging
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.architecture import router as architecture_router
 from app.attacks import router as attacks_router
@@ -25,6 +26,16 @@ app = FastAPI(
         "AI-powered architecture resilience testing platform. "
         "Attack → Observe → Diagnose → Improve → Compare."
     ),
+)
+
+# Allow the Vite dev server (and any local origin) to call the API.
+# In production replace allow_origins with the actual frontend domain.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(architecture_router)
