@@ -41,7 +41,7 @@ from app.architecture import architectures
 from app.attacks import attacks, _now, _set_status
 from app.diagnosis import DiagnosisContext, diagnose_from_context
 from app.recommendations import generate_recommendations
-from app.telemetry import collect_gateway_metrics
+from app.telemetry import collect_raw_counters, collect_metrics_from_delta
 from app.toxiproxy import add_latency, remove_latency, toxic_exists
 from app.traffic import generate_traffic
 
@@ -121,14 +121,30 @@ class RetestRequest(BaseModel):
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-async def _safe_metrics(label: str) -> dict:
-    """Collect gateway metrics; return {} on any failure."""
+# Prometheus scrapes every 10 s.  We wait SCRAPE_WAIT_SECONDS after each
+# traffic window before reading counters so at least one scrape fires.
+SCRAPE_WAIT_SECONDS = 12
+
+
+async def _safe_snapshot(label: str) -> dict:
+    """Take a raw counter snapshot; return empty dict on failure."""
     try:
-        m = await collect_gateway_metrics()
-        logger.info("Metrics [%s]: %s", label, m)
+        snap = await collect_raw_counters("gateway")
+        logger.info("Counter snapshot [%s]: %s", label, snap)
+        return snap
+    except Exception as exc:
+        logger.warning("Could not take counter snapshot [%s]: %s", label, exc)
+        return {"count": 0.0, "latency_sum": 0.0}
+
+
+async def _safe_delta_metrics(before: dict, after: dict, label: str) -> dict:
+    """Compute delta metrics between two snapshots; return {} on failure."""
+    try:
+        m = await collect_metrics_from_delta(before, after, "gateway")
+        logger.info("Delta metrics [%s]: %s", label, m)
         return m
     except Exception as exc:
-        logger.warning("Could not collect %s metrics: %s", label, exc)
+        logger.warning("Could not collect delta metrics [%s]: %s", label, exc)
         return {}
 
 
@@ -233,14 +249,19 @@ async def _run_experiment_core(
     attacks[attack_id] = attack_record
 
     # 2. Baseline — clean traffic, no toxic
+    # Snapshot BEFORE baseline traffic, run traffic, wait for Prometheus scrape,
+    # then snapshot AFTER. Delta gives us baseline-only metrics.
     logger.info("[%s] Collecting baseline…", experiment_id)
     await _ensure_clean()
+    snap_before_baseline = await _safe_snapshot("before-baseline")
     await generate_traffic(
         rate=min(traffic_config.rate, 3),
         duration_seconds=min(traffic_config.duration_seconds, 5),
     )
-    await asyncio.sleep(2)
-    baseline_metrics = await _safe_metrics("baseline")
+    # Wait for at least one full Prometheus scrape cycle (10 s interval + 2 s buffer)
+    await asyncio.sleep(SCRAPE_WAIT_SECONDS)
+    snap_after_baseline = await _safe_snapshot("after-baseline")
+    baseline_metrics = await _safe_delta_metrics(snap_before_baseline, snap_after_baseline, "baseline")
 
     # 3. Inject attack (effective latency)
     logger.info("[%s] Injecting latency %d ms…", experiment_id, effective_ms)
@@ -255,17 +276,20 @@ async def _run_experiment_core(
             detail=f"Failed to inject attack: {str(exc)}",
         ) from exc
 
-    # 4. Traffic under attack
+    # 4. Traffic under attack — snapshot before, generate, snapshot after
     logger.info("[%s] Generating traffic under attack…", experiment_id)
+    snap_before_attack = await _safe_snapshot("before-attack")
     traffic_result = await generate_traffic(
         rate=traffic_config.rate,
         duration_seconds=traffic_config.duration_seconds,
     )
-    await asyncio.sleep(3)
+    # Wait for Prometheus scrape again before reading attack metrics
+    await asyncio.sleep(SCRAPE_WAIT_SECONDS)
+    snap_after_attack = await _safe_snapshot("after-attack")
 
     # 5. Collect attack metrics
     logger.info("[%s] Collecting attack metrics…", experiment_id)
-    attack_metrics = await _safe_metrics("attack")
+    attack_metrics = await _safe_delta_metrics(snap_before_attack, snap_after_attack, "attack")
     attack_record["metrics"] = attack_metrics
     _set_status(attack_record, "metrics_collected")
 

@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.diagnosis import _latency_severity, DiagnosisContext, RuleBasedDiagnosisEngine
 from app.experiment import _calculate_improvement, _effective_latency, ResilienceConfig
+from app.telemetry import compute_metrics_from_delta
 
 client = TestClient(app)
 
@@ -324,7 +325,101 @@ class TestEffectiveLatency:
 
 
 # ===========================================================================
-# 9. Comparison calculation
+# 9. compute_metrics_from_delta — pure unit tests, no HTTP
+# ===========================================================================
+
+class TestComputeMetricsFromDelta:
+    """Unit tests for compute_metrics_from_delta()."""
+
+    def test_normal_delta_request_count(self):
+        before = {"count": 10.0, "latency_sum": 1.0}
+        after  = {"count": 30.0, "latency_sum": 4.0}
+        m = compute_metrics_from_delta(before, after, "gateway")
+        assert m["request_count"] == 20
+        assert m["average_latency_ms"] == pytest.approx(150.0)  # (3/20)*1000
+
+    def test_normal_delta_average_latency(self):
+        before = {"count": 0.0,  "latency_sum": 0.0}
+        after  = {"count": 10.0, "latency_sum": 5.0}
+        m = compute_metrics_from_delta(before, after, "gateway")
+        assert m["average_latency_ms"] == pytest.approx(500.0)  # (5/10)*1000
+
+    def test_zero_before_snapshot(self):
+        """Snapshots starting at absolute zero — common for first-run baseline."""
+        before = {"count": 0.0, "latency_sum": 0.0}
+        after  = {"count": 5.0, "latency_sum": 2.5}
+        m = compute_metrics_from_delta(before, after, "gateway")
+        assert m["request_count"] == 5
+        assert m["average_latency_ms"] == pytest.approx(500.0)
+
+    def test_negative_delta_counter_reset(self):
+        """If after < before (counter reset), result must be clamped to 0."""
+        before = {"count": 100.0, "latency_sum": 10.0}
+        after  = {"count":  50.0, "latency_sum":  5.0}
+        m = compute_metrics_from_delta(before, after, "gateway")
+        assert m["request_count"] == 0
+        assert m["average_latency_ms"] == 0.0
+
+    def test_both_snapshots_zero(self):
+        """No traffic at all — all counters remain zero."""
+        before = {"count": 0.0, "latency_sum": 0.0}
+        after  = {"count": 0.0, "latency_sum": 0.0}
+        m = compute_metrics_from_delta(before, after, "gateway")
+        assert m["request_count"] == 0
+        assert m["average_latency_ms"] == 0.0
+
+    def test_service_id_stored_in_result(self):
+        before = {"count": 0.0, "latency_sum": 0.0}
+        after  = {"count": 1.0, "latency_sum": 0.1}
+        m = compute_metrics_from_delta(before, after, "payment")
+        assert m["service"] == "payment"
+
+    def test_p95_included_when_provided(self):
+        before = {"count": 0.0, "latency_sum": 0.0}
+        after  = {"count": 5.0, "latency_sum": 1.0}
+        m = compute_metrics_from_delta(before, after, "gateway", p95_latency_ms=250.0)
+        assert m["p95_latency_ms"] == pytest.approx(250.0)
+
+    def test_p95_excluded_when_none(self):
+        before = {"count": 0.0, "latency_sum": 0.0}
+        after  = {"count": 5.0, "latency_sum": 1.0}
+        m = compute_metrics_from_delta(before, after, "gateway", p95_latency_ms=None)
+        assert "p95_latency_ms" not in m
+
+    def test_p95_excluded_when_negative(self):
+        """Negative P95 means Prometheus returned no data — should not appear."""
+        before = {"count": 0.0, "latency_sum": 0.0}
+        after  = {"count": 5.0, "latency_sum": 1.0}
+        m = compute_metrics_from_delta(before, after, "gateway", p95_latency_ms=-1.0)
+        assert "p95_latency_ms" not in m
+
+    def test_error_rate_included_when_provided(self):
+        before = {"count": 0.0, "latency_sum": 0.0}
+        after  = {"count": 5.0, "latency_sum": 1.0}
+        m = compute_metrics_from_delta(before, after, "gateway", error_rate_percent=5.5)
+        assert m["error_rate_percent"] == pytest.approx(5.5)
+
+    def test_error_rate_excluded_when_none(self):
+        before = {"count": 0.0, "latency_sum": 0.0}
+        after  = {"count": 5.0, "latency_sum": 1.0}
+        m = compute_metrics_from_delta(before, after, "gateway")
+        assert "error_rate_percent" not in m
+
+    def test_total_latency_seconds_in_result(self):
+        before = {"count": 0.0, "latency_sum": 0.0}
+        after  = {"count": 4.0, "latency_sum": 2.0}
+        m = compute_metrics_from_delta(before, after, "gateway")
+        assert m["total_latency_seconds"] == pytest.approx(2.0, abs=0.001)
+
+    def test_missing_keys_default_to_zero(self):
+        """Snapshots with missing keys should not raise — treat as 0."""
+        m = compute_metrics_from_delta({}, {}, "gateway")
+        assert m["request_count"] == 0
+        assert m["average_latency_ms"] == 0.0
+
+
+# ===========================================================================
+# 10. Comparison calculation
 # ===========================================================================
 
 class TestCalculateImprovement:

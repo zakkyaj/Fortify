@@ -64,3 +64,17 @@ async def query_scalar(query: str, default: float = 0.0) -> float:
         return float(result[0]["value"][1])
     except (KeyError, IndexError, ValueError):
         return default
+
+
+async def query_rate_scalar(query: str, window: str = "1m", default: float = 0.0) -> float:
+    """
+    Execute a Prometheus rate/irate query over a given window and return
+    the first scalar value.
+
+    ``query`` should be a raw metric name (no ``rate(...)`` wrapper); this
+    function wraps it automatically.
+
+    Returns ``default`` when the query produces no results.
+    """
+    rate_query = f"rate({query}[{window}])"
+    return await query_scalar(rate_query, default)
