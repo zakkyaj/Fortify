@@ -261,6 +261,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  padding: 4px 0;
 }
 
 .serviceInfo {
@@ -273,6 +274,13 @@
 
 .serviceDot {
   flex-shrink: 0;
+}
+
+.serviceNameGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
 }
 
 .serviceName {
@@ -289,6 +297,7 @@
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  line-height: 1;
 }
 
 .statusSelect {
@@ -298,11 +307,12 @@
   color: var(--text);
   font-size: 11px;
   font-family: var(--sans);
-  padding: 3px 6px;
+  padding: 3px 4px;
   outline: none;
   cursor: pointer;
   flex-shrink: 0;
   transition: border-color 0.15s;
+  max-width: 90px;
 }
 
 .statusSelect:focus {

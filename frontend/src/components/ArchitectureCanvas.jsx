@@ -28,7 +28,7 @@ function buildNodes(serviceStatuses = {}) {
     {
       id: 'gateway',
       type: 'serviceNode',
-      position: { x: 260, y: 60 },
+      position: { x: 160, y: 30 },
       data: {
         label: 'Gateway',
         nodeType: 'gateway',
@@ -40,7 +40,7 @@ function buildNodes(serviceStatuses = {}) {
     {
       id: 'order',
       type: 'serviceNode',
-      position: { x: 260, y: 220 },
+      position: { x: 160, y: 175 },
       data: {
         label: 'Order Service',
         nodeType: 'service',
@@ -52,7 +52,7 @@ function buildNodes(serviceStatuses = {}) {
     {
       id: 'payment',
       type: 'serviceNode',
-      position: { x: 260, y: 380 },
+      position: { x: 160, y: 320 },
       data: {
         label: 'Payment Service',
         nodeType: 'service',
@@ -64,7 +64,7 @@ function buildNodes(serviceStatuses = {}) {
     {
       id: 'database',
       type: 'serviceNode',
-      position: { x: 260, y: 540 },
+      position: { x: 160, y: 465 },
       data: {
         label: 'SQLite Database',
         nodeType: 'database',

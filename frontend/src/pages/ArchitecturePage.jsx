@@ -218,8 +218,10 @@ export default function ArchitecturePage() {
                   <div key={svc.id} className={styles.serviceRow}>
                     <div className={styles.serviceInfo}>
                       <span className={`dot dot-${currentStatus} ${styles.serviceDot}`} />
-                      <span className={styles.serviceName}>{svc.name}</span>
-                      <span className={styles.serviceType}>{svc.type}</span>
+                      <div className={styles.serviceNameGroup}>
+                        <span className={styles.serviceName}>{svc.name}</span>
+                        <span className={styles.serviceType}>{svc.type}</span>
+                      </div>
                     </div>
                     <select
                       className={styles.statusSelect}
