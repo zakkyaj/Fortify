@@ -1,0 +1,100 @@
+.wrapper { padding: 20px; }
+
+.head {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;
+}
+
+.stepNum {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent-dim); border: 1px solid var(--accent-border);
+  color: var(--accent); font-size: 10px; font-weight: 700; flex-shrink: 0;
+}
+
+.title { font-size: 13px; font-weight: 600; color: var(--text-h); margin: 0; flex: 1; }
+
+.severityBadge {
+  font-size: 11px; font-weight: 700;
+  padding: 3px 10px; border-radius: 20px;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+
+.severityHigh    { background: var(--status-failure-bg);  color: var(--status-failure);  border: 1px solid rgba(239,68,68,0.2); }
+.severityMedium  { background: var(--status-degraded-bg); color: var(--status-degraded); border: 1px solid rgba(245,158,11,0.2); }
+.severityLow     { background: var(--status-healthy-bg);  color: var(--status-healthy);  border: 1px solid rgba(16,217,142,0.2); }
+.severityUnknown { background: var(--status-unknown-bg);  color: var(--status-unknown);  border: 1px solid rgba(107,114,128,0.2); }
+
+.empty {
+  font-size: 12px; color: var(--text-muted);
+  background: var(--bg-surface); border-radius: 6px; padding: 14px 16px;
+  border: 1px solid var(--border);
+}
+
+.section { margin-bottom: 16px; }
+.section:last-child { margin-bottom: 0; }
+
+.sectionLabel {
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-muted); display: block; margin-bottom: 8px;
+}
+
+.problemText {
+  font-size: 13px; color: var(--text-h); line-height: 1.6;
+  background: var(--bg-surface); border-radius: 6px;
+  padding: 12px 14px; border-left: 3px solid var(--status-failure);
+}
+
+.rootCauseText {
+  font-size: 13px; color: var(--text); line-height: 1.6;
+  background: var(--bg-surface); border-radius: 6px;
+  padding: 12px 14px; border-left: 3px solid var(--status-degraded);
+}
+
+/* Service chain */
+.serviceChain {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+}
+
+.serviceChainItem { display: flex; align-items: center; gap: 6px; }
+
+.svcBadge {
+  font-size: 11px; font-weight: 600;
+  background: var(--status-failure-bg); color: var(--status-failure);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: 4px; padding: 2px 8px;
+}
+
+/* Evidence grid */
+.evidenceGrid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+}
+
+@media (max-width: 700px) { .evidenceGrid { grid-template-columns: 1fr 1fr; } }
+
+.evidenceItem {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+
+.evidenceKey {
+  font-size: 10px; color: var(--text-muted);
+  text-transform: capitalize; letter-spacing: 0.03em;
+}
+
+.evidenceVal {
+  font-size: 13px; font-weight: 600;
+  color: var(--text-h); font-family: var(--mono);
+}
+
+/* Recommendation box */
+.recBox {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: var(--accent-dim); border: 1px solid var(--accent-border);
+  border-radius: 6px; padding: 12px 14px; margin-top: 4px;
+}
+
+.recText {
+  font-size: 12px; color: var(--text-h); line-height: 1.6; margin: 0;
+}

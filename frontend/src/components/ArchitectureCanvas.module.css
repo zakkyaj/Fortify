@@ -1,0 +1,59 @@
+.canvasWrapper {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-app);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Override ReactFlow default dark handle colour */
+.canvasWrapper :global(.react-flow__handle) {
+  border-color: var(--bg-card) !important;
+}
+
+/* Controls panel */
+.canvasWrapper :global(.react-flow__controls) {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-md);
+  bottom: 48px;
+}
+
+.canvasWrapper :global(.react-flow__controls-button) {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  fill: var(--text);
+  color: var(--text);
+}
+
+.canvasWrapper :global(.react-flow__controls-button:hover) {
+  background: var(--bg-surface);
+}
+
+.canvasWrapper :global(.react-flow__controls-button svg) {
+  fill: var(--text);
+}
+
+/* MiniMap */
+.canvasWrapper :global(.react-flow__minimap) {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+/* Attribution */
+.canvasWrapper :global(.react-flow__attribution) {
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.canvasWrapper :global(.react-flow__attribution a) {
+  color: var(--text-muted);
+}
+
+/* Edge labels */
+.canvasWrapper :global(.react-flow__edge-textbg) {
+  fill: var(--bg-app);
+}

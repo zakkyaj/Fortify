@@ -1,0 +1,170 @@
+# =============================================================================
+# FORTIFY — Root Docker Compose
+#
+# Run everything from the repo root:
+#   docker compose up --build -d
+#   docker compose down
+#   docker compose down -v
+# =============================================================================
+
+name: fortify
+
+networks:
+  fortify-net:
+    driver: bridge
+
+volumes:
+  payment-data:
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Backend — FastAPI orchestrator
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: fortify-backend
+    environment:
+      TOXIPROXY_URL: "http://toxiproxy:8474"
+      PROMETHEUS_URL: "http://prometheus:9090"
+      TARGET_URL: "http://gateway:5000/order"
+    ports:
+      - "8000:8000"
+    networks:
+      - fortify-net
+    depends_on:
+      toxiproxy:
+        condition: service_started
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Gateway — external entry point, forwards to Order
+  # ---------------------------------------------------------------------------
+  gateway:
+    build:
+      context: ./infrastructure/services/gateway
+    container_name: fortify-gateway
+    environment:
+      ORDER_SERVICE_URL: "http://order:5001"
+    ports:
+      - "8080:5000"
+    networks:
+      - fortify-net
+    depends_on:
+      order:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Order Service — receives from Gateway, calls Payment via Toxiproxy
+  # ---------------------------------------------------------------------------
+  order:
+    build:
+      context: ./infrastructure/services/order
+    container_name: fortify-order
+    environment:
+      PAYMENT_PROXY_LISTEN: "toxiproxy:20001"
+    ports:
+      - "5001:5001"
+    networks:
+      - fortify-net
+    depends_on:
+      toxiproxy:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Payment Service — processes payments, writes to SQLite
+  # ---------------------------------------------------------------------------
+  payment:
+    build:
+      context: ./infrastructure/services/payment
+    container_name: fortify-payment
+    environment:
+      DB_PATH: "/data/payments.db"
+    volumes:
+      - payment-data:/data
+    ports:
+      - "5002:5002"
+    networks:
+      - fortify-net
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5002/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Toxiproxy — fault injection
+  # ---------------------------------------------------------------------------
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    container_name: fortify-toxiproxy
+    command: ["-config", "/etc/toxiproxy/toxiproxy.json", "-host", "0.0.0.0"]
+    volumes:
+      - ./infrastructure/toxiproxy/toxiproxy.json:/etc/toxiproxy/toxiproxy.json:ro
+    ports:
+      - "8474:8474"
+    networks:
+      - fortify-net
+    depends_on:
+      payment:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Prometheus — metrics collection
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: fortify-prometheus
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    ports:
+      - "9090:9090"
+    networks:
+      - fortify-net
+    depends_on:
+      - gateway
+      - order
+      - payment
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
