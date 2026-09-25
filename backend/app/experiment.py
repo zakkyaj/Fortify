@@ -126,8 +126,11 @@ class RetestRequest(BaseModel):
 SCRAPE_WAIT_SECONDS = 12
 
 
+_SERVICES = ("gateway", "order", "payment")
+
+
 async def _safe_snapshot(label: str) -> dict:
-    """Take a raw counter snapshot; return empty dict on failure."""
+    """Take a raw counter snapshot for gateway; return empty dict on failure."""
     try:
         snap = await collect_raw_counters("gateway")
         logger.info("Counter snapshot [%s]: %s", label, snap)
@@ -137,8 +140,25 @@ async def _safe_snapshot(label: str) -> dict:
         return {"count": 0.0, "latency_sum": 0.0}
 
 
+async def _safe_snapshot_multi(label: str) -> dict[str, dict]:
+    """Take raw counter snapshots for all three services in parallel."""
+    results = await asyncio.gather(
+        *[collect_raw_counters(svc) for svc in _SERVICES],
+        return_exceptions=True,
+    )
+    snaps: dict[str, dict] = {}
+    for svc, res in zip(_SERVICES, results):
+        if isinstance(res, Exception):
+            logger.warning("Could not snapshot [%s] %s: %s", label, svc, res)
+            snaps[svc] = {"count": 0.0, "latency_sum": 0.0}
+        else:
+            snaps[svc] = res
+    logger.info("Multi-snapshot [%s]: %s", label, snaps)
+    return snaps
+
+
 async def _safe_delta_metrics(before: dict, after: dict, label: str) -> dict:
-    """Compute delta metrics between two snapshots; return {} on failure."""
+    """Compute delta metrics between two gateway snapshots; return {} on failure."""
     try:
         m = await collect_metrics_from_delta(before, after, "gateway")
         logger.info("Delta metrics [%s]: %s", label, m)
@@ -146,6 +166,29 @@ async def _safe_delta_metrics(before: dict, after: dict, label: str) -> dict:
     except Exception as exc:
         logger.warning("Could not collect delta metrics [%s]: %s", label, exc)
         return {}
+
+
+async def _safe_delta_metrics_multi(
+    before: dict[str, dict],
+    after: dict[str, dict],
+    label: str,
+) -> dict[str, dict]:
+    """Compute delta metrics for all three services in parallel."""
+    results = await asyncio.gather(
+        *[
+            collect_metrics_from_delta(before.get(svc, {}), after.get(svc, {}), svc)
+            for svc in _SERVICES
+        ],
+        return_exceptions=True,
+    )
+    metrics: dict[str, dict] = {}
+    for svc, res in zip(_SERVICES, results):
+        if isinstance(res, Exception):
+            logger.warning("Could not collect delta metrics [%s] %s: %s", label, svc, res)
+            metrics[svc] = {}
+        else:
+            metrics[svc] = res
+    return metrics
 
 
 async def _ensure_clean() -> None:
@@ -253,15 +296,22 @@ async def _run_experiment_core(
     # then snapshot AFTER. Delta gives us baseline-only metrics.
     logger.info("[%s] Collecting baseline…", experiment_id)
     await _ensure_clean()
-    snap_before_baseline = await _safe_snapshot("before-baseline")
+    snap_before_baseline, multi_before_baseline = await asyncio.gather(
+        _safe_snapshot("before-baseline"),
+        _safe_snapshot_multi("before-baseline-multi"),
+    )
     await generate_traffic(
         rate=min(traffic_config.rate, 3),
         duration_seconds=min(traffic_config.duration_seconds, 5),
     )
     # Wait for at least one full Prometheus scrape cycle (10 s interval + 2 s buffer)
     await asyncio.sleep(SCRAPE_WAIT_SECONDS)
-    snap_after_baseline = await _safe_snapshot("after-baseline")
+    snap_after_baseline, multi_after_baseline = await asyncio.gather(
+        _safe_snapshot("after-baseline"),
+        _safe_snapshot_multi("after-baseline-multi"),
+    )
     baseline_metrics = await _safe_delta_metrics(snap_before_baseline, snap_after_baseline, "baseline")
+    baseline_service_metrics = await _safe_delta_metrics_multi(multi_before_baseline, multi_after_baseline, "baseline-multi")
 
     # 3. Inject attack (effective latency)
     logger.info("[%s] Injecting latency %d ms…", experiment_id, effective_ms)
@@ -278,18 +328,25 @@ async def _run_experiment_core(
 
     # 4. Traffic under attack — snapshot before, generate, snapshot after
     logger.info("[%s] Generating traffic under attack…", experiment_id)
-    snap_before_attack = await _safe_snapshot("before-attack")
+    snap_before_attack, multi_before_attack = await asyncio.gather(
+        _safe_snapshot("before-attack"),
+        _safe_snapshot_multi("before-attack-multi"),
+    )
     traffic_result = await generate_traffic(
         rate=traffic_config.rate,
         duration_seconds=traffic_config.duration_seconds,
     )
     # Wait for Prometheus scrape again before reading attack metrics
     await asyncio.sleep(SCRAPE_WAIT_SECONDS)
-    snap_after_attack = await _safe_snapshot("after-attack")
+    snap_after_attack, multi_after_attack = await asyncio.gather(
+        _safe_snapshot("after-attack"),
+        _safe_snapshot_multi("after-attack-multi"),
+    )
 
     # 5. Collect attack metrics
     logger.info("[%s] Collecting attack metrics…", experiment_id)
     attack_metrics = await _safe_delta_metrics(snap_before_attack, snap_after_attack, "attack")
+    attack_service_metrics = await _safe_delta_metrics_multi(multi_before_attack, multi_after_attack, "attack-multi")
     attack_record["metrics"] = attack_metrics
     _set_status(attack_record, "metrics_collected")
 
@@ -313,6 +370,10 @@ async def _run_experiment_core(
         baseline_latency_ms=baseline_metrics.get("average_latency_ms"),
         observed_p95_ms=attack_metrics.get("p95_latency_ms"),
         baseline_p95_ms=baseline_metrics.get("p95_latency_ms"),
+        service_metrics={
+            "baseline": baseline_service_metrics,
+            "attack": attack_service_metrics,
+        },
     )
     diagnosis = diagnose_from_context(context)
 
@@ -353,6 +414,10 @@ async def _run_experiment_core(
         },
         "baseline_metrics": baseline_metrics,
         "attack_metrics": attack_metrics,
+        "service_metrics": {
+            "baseline": baseline_service_metrics,
+            "attack": attack_service_metrics,
+        },
         "diagnosis": diagnosis,
         "recommendations": recs,
     }
@@ -479,6 +544,7 @@ async def retest(request: RetestRequest):
         "traffic": result["traffic"],
         "baseline_metrics": result["baseline_metrics"],
         "attack_metrics": result["attack_metrics"],
+        "service_metrics": result["service_metrics"],
         "diagnosis": result["diagnosis"],
         "recommendations": result["recommendations"],
         "comparison": original_comparison,

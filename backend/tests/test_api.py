@@ -539,6 +539,227 @@ def test_retest_request_circuit_breaker_config():
 
 
 # ===========================================================================
+# 14. Multi-service snapshot helpers — unit (no infra)
+# ===========================================================================
+
+class TestSafeSnapshotMulti:
+    """_safe_snapshot_multi returns a dict keyed by service name."""
+
+    @pytest.mark.asyncio
+    async def test_returns_all_three_services(self, monkeypatch):
+        from app.experiment import _safe_snapshot_multi
+
+        async def fake_collect(svc):
+            return {"count": 1.0, "latency_sum": 0.5}
+
+        monkeypatch.setattr("app.experiment.collect_raw_counters", fake_collect)
+        result = await _safe_snapshot_multi("test")
+        assert set(result.keys()) == {"gateway", "order", "payment"}
+
+    @pytest.mark.asyncio
+    async def test_failing_service_returns_zero_snapshot(self, monkeypatch):
+        from app.experiment import _safe_snapshot_multi
+
+        async def fake_collect(svc):
+            if svc == "order":
+                raise RuntimeError("prometheus down")
+            return {"count": 2.0, "latency_sum": 1.0}
+
+        monkeypatch.setattr("app.experiment.collect_raw_counters", fake_collect)
+        result = await _safe_snapshot_multi("test")
+        assert result["order"] == {"count": 0.0, "latency_sum": 0.0}
+        assert result["gateway"]["count"] == 2.0
+        assert result["payment"]["count"] == 2.0
+
+
+class TestSafeDeltaMetricsMulti:
+    """_safe_delta_metrics_multi returns a dict keyed by service name."""
+
+    @pytest.mark.asyncio
+    async def test_returns_all_three_services(self, monkeypatch):
+        from app.experiment import _safe_delta_metrics_multi
+
+        async def fake_delta(before, after, svc):
+            return {"service": svc, "request_count": 5}
+
+        monkeypatch.setattr("app.experiment.collect_metrics_from_delta", fake_delta)
+        before = {s: {} for s in ("gateway", "order", "payment")}
+        after  = {s: {} for s in ("gateway", "order", "payment")}
+        result = await _safe_delta_metrics_multi(before, after, "test")
+        assert set(result.keys()) == {"gateway", "order", "payment"}
+        assert result["order"]["service"] == "order"
+
+    @pytest.mark.asyncio
+    async def test_failing_service_returns_empty_dict(self, monkeypatch):
+        from app.experiment import _safe_delta_metrics_multi
+
+        async def fake_delta(before, after, svc):
+            if svc == "payment":
+                raise RuntimeError("timeout")
+            return {"service": svc, "request_count": 3}
+
+        monkeypatch.setattr("app.experiment.collect_metrics_from_delta", fake_delta)
+        before = {s: {} for s in ("gateway", "order", "payment")}
+        after  = {s: {} for s in ("gateway", "order", "payment")}
+        result = await _safe_delta_metrics_multi(before, after, "test")
+        assert result["payment"] == {}
+        assert result["gateway"]["request_count"] == 3
+
+    @pytest.mark.asyncio
+    async def test_missing_service_key_uses_empty_dict(self, monkeypatch):
+        from app.experiment import _safe_delta_metrics_multi
+
+        async def fake_delta(before, after, svc):
+            return {"service": svc}
+
+        monkeypatch.setattr("app.experiment.collect_metrics_from_delta", fake_delta)
+        # Provide snapshots without "order" key
+        before = {"gateway": {}, "payment": {}}
+        after  = {"gateway": {}, "payment": {}}
+        result = await _safe_delta_metrics_multi(before, after, "test")
+        # order snapshot falls back to empty dict — no exception raised
+        assert "order" in result
+
+
+# ===========================================================================
+# 15. service_metrics shape — unit (no infra, validation-only)
+# ===========================================================================
+
+def test_experiment_validation_rejects_wrong_arch_before_snapshots():
+    """service_metrics never built when arch validation fails at step 1."""
+    r = client.post("/api/experiment/run", json={
+        "architecture_id": "arch_does_not_exist",
+        "attack": {"target": "payment", "type": "latency", "value": 5000},
+    })
+    assert r.status_code == 404
+    # No service_metrics key on error responses
+    assert "service_metrics" not in r.json()
+
+
+# ===========================================================================
+# 16. DiagnosisContext.service_metrics integration — unit (no infra)
+# ===========================================================================
+
+class TestDiagnosisWithServiceMetrics:
+    """
+    RuleBasedDiagnosisEngine must overlay ResilienceAnalyzer output when
+    service_metrics are present, and must leave all existing fields intact.
+    """
+
+    # Realistic 5-second Payment latency experiment metrics
+    _SM = {
+        "baseline": {
+            "payment": {"average_latency_ms":   30.0, "request_count": 30},
+            "order":   {"average_latency_ms":   45.0, "request_count": 30},
+            "gateway": {"average_latency_ms":   60.0, "request_count": 30},
+        },
+        "attack": {
+            "payment": {"average_latency_ms": 5030.0, "request_count": 30},
+            "order":   {"average_latency_ms": 5080.0, "request_count": 30},
+            "gateway": {"average_latency_ms": 5120.0, "request_count": 30},
+        },
+    }
+
+    def _ctx(self, service_metrics=None):
+        return DiagnosisContext(
+            attack_type="latency",
+            target="payment",
+            attack_value=5000,
+            observed_latency_ms=5080.0,
+            baseline_latency_ms=45.0,
+            service_metrics=service_metrics,
+        )
+
+    # ── Legacy path: service_metrics absent ───────────────────────────────────
+
+    def test_legacy_problem_field_present(self):
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx())
+        assert "problem" in result
+        assert "Payment" in result["problem"]
+
+    def test_legacy_recommendation_field_present(self):
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx())
+        assert "recommendation" in result
+
+    def test_legacy_severity_determined_by_rule_engine(self):
+        """5 000 ms attack, avg uplift > 3× → rule engine returns high."""
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx())
+        assert result["severity"] == "high"
+
+    def test_legacy_no_propagation_key(self):
+        """Without service_metrics, propagation key must NOT appear."""
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx())
+        assert "propagation" not in result
+
+    def test_legacy_no_confidence_key(self):
+        """Without service_metrics, confidence key must NOT appear."""
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx())
+        assert "confidence" not in result
+
+    def test_legacy_evidence_is_scalar_dict(self):
+        """Legacy evidence contains flat scalar keys from _latency_severity."""
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx())
+        assert "attack_latency_ms" in result["evidence"]
+
+    # ── Enhanced path: service_metrics present ────────────────────────────────
+
+    def test_enhanced_severity_is_high(self):
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx(self._SM))
+        assert result["severity"] == "high"
+
+    def test_enhanced_affected_services_downstream_to_upstream(self):
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx(self._SM))
+        assert result["affected_services"] == ["payment", "order", "gateway"]
+
+    def test_enhanced_root_cause_names_payment_as_origin(self):
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx(self._SM))
+        assert "payment" in result["root_cause"].lower()
+
+    def test_enhanced_root_cause_mentions_propagation(self):
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx(self._SM))
+        assert "propagated" in result["root_cause"].lower()
+
+    def test_enhanced_propagation_key_present(self):
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx(self._SM))
+        assert "propagation" in result
+        assert len(result["propagation"]) == 3
+
+    def test_enhanced_confidence_is_high(self):
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx(self._SM))
+        assert result["confidence"] == "high"
+
+    def test_enhanced_evidence_is_per_service_dict(self):
+        """Enhanced evidence is keyed by service name from ResilienceAnalyzer."""
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx(self._SM))
+        assert set(result["evidence"].keys()) == {"payment", "order", "gateway"}
+
+    def test_enhanced_evidence_payment_degraded_true(self):
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx(self._SM))
+        assert result["evidence"]["payment"]["degraded"] is True
+
+    def test_enhanced_preserves_problem_field(self):
+        """problem and recommendation must survive the overlay."""
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx(self._SM))
+        assert "problem" in result
+
+    def test_enhanced_preserves_recommendation_field(self):
+        result = RuleBasedDiagnosisEngine().diagnose(self._ctx(self._SM))
+        assert "recommendation" in result
+
+    def test_enhanced_via_diagnose_from_context(self):
+        """End-to-end: diagnose_from_context() must carry enhanced fields through."""
+        from app.diagnosis import diagnose_from_context
+        ctx = self._ctx(self._SM)
+        record = diagnose_from_context(ctx)
+        assert record["severity"] == "high"
+        assert "propagation" in record
+        assert record["affected_services"] == ["payment", "order", "gateway"]
+        assert "diagnosis_id" in record
+
+
+
+
+# ===========================================================================
 # Integration tests — require Docker + running infrastructure
 # ===========================================================================
 

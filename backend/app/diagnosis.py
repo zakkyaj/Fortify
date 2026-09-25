@@ -10,6 +10,8 @@ Public API:
   - diagnose_from_context() — called by the experiment orchestrator
 """
 import logging
+import sys
+import os
 from abc import ABC, abstractmethod
 from typing import Optional
 from uuid import uuid4
@@ -46,6 +48,7 @@ class DiagnosisContext:
         baseline_latency_ms: Optional[float] = None,
         observed_p95_ms: Optional[float] = None,
         baseline_p95_ms: Optional[float] = None,
+        service_metrics: Optional[dict] = None,
     ):
         self.attack_type = attack_type
         self.target = target
@@ -56,6 +59,7 @@ class DiagnosisContext:
         self.baseline_latency_ms = baseline_latency_ms
         self.observed_p95_ms = observed_p95_ms
         self.baseline_p95_ms = baseline_p95_ms
+        self.service_metrics = service_metrics
 
 
 class DiagnosisEngine(ABC):
@@ -139,6 +143,25 @@ def _latency_severity(
     return severity, evidence
 
 
+def _load_resilience_analyzer():
+    """
+    Import ResilienceAnalyzer from the sibling ai/ package without adding a
+    hard install-time dependency.  Returns None if the module cannot be found
+    (e.g. when running in an environment where ai/ is not on sys.path).
+    """
+    ai_dir = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "ai")
+    )
+    if ai_dir not in sys.path:
+        sys.path.insert(0, ai_dir)
+    try:
+        from resilience_analyzer import ResilienceAnalyzer  # noqa: PLC0415
+        return ResilienceAnalyzer()
+    except ImportError:
+        logger.warning("ResilienceAnalyzer not available — falling back to rule-based only")
+        return None
+
+
 class RuleBasedDiagnosisEngine(DiagnosisEngine):
     """Deterministic rule-based diagnosis.  No external dependencies."""
 
@@ -159,7 +182,7 @@ class RuleBasedDiagnosisEngine(DiagnosisEngine):
             baseline_p95_ms=context.baseline_p95_ms,
         )
 
-        return {
+        result = {
             "problem": (
                 f"{context.target.capitalize()} service latency ({context.attack_value} ms) "
                 "is propagating through the request path and significantly "
@@ -177,6 +200,20 @@ class RuleBasedDiagnosisEngine(DiagnosisEngine):
                 "A slow payment response blocks the entire upstream chain."
             ),
         }
+
+        # ── Overlay with ResilienceAnalyzer when service_metrics are available ──
+        if context.service_metrics:
+            analyzer = _load_resilience_analyzer()
+            if analyzer is not None:
+                analysis = analyzer.analyze(context.service_metrics)
+                result["root_cause"] = analysis.root_cause
+                result["severity"] = analysis.severity
+                result["affected_services"] = analysis.affected_services
+                result["evidence"] = analysis.evidence
+                result["propagation"] = analysis.propagation
+                result["confidence"] = analysis.confidence
+
+        return result
 
 
 # Default engine used by the application.

@@ -4,15 +4,7 @@
 # Run everything from the repo root:
 #   docker compose up --build -d
 #   docker compose down
-#   docker compose down -v   (also removes the payment-data volume)
-#
-# Service host ports:
-#   backend    → http://localhost:8000   FastAPI API
-#   gateway    → http://localhost:8080   Demo entry point
-#   order      → http://localhost:5001   Debug
-#   payment    → http://localhost:5002   Debug
-#   toxiproxy  → http://localhost:8474   Fault injection API
-#   prometheus → http://localhost:9090   Metrics UI
+#   docker compose down -v
 # =============================================================================
 
 name: fortify
@@ -31,7 +23,8 @@ services:
   # ---------------------------------------------------------------------------
   backend:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: fortify-backend
     environment:
       TOXIPROXY_URL: "http://toxiproxy:8474"
@@ -130,7 +123,7 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
-  # Toxiproxy — fault injection proxy
+  # Toxiproxy — fault injection
   # ---------------------------------------------------------------------------
   toxiproxy:
     image: ghcr.io/shopify/toxiproxy:2.9.0
