@@ -1,7 +1,7 @@
 /**
  * Sidebar navigation component.
- * Displays the Fortify brand and navigation items.
- * Only Architecture is active in Step 1.
+ * All 7 workflow steps are navigable.
+ * Accepts `unlockedSteps` set to disable steps that require prior data.
  */
 import styles from './Sidebar.module.css'
 
@@ -20,72 +20,20 @@ const NAV_ITEMS = [
         <line x1="12" y1="12" x2="12" y2="15" />
       </svg>
     ),
-    active: true,
-    available: true,
   },
   {
-    id: 'attack',
-    label: 'Attack',
+    id: 'experiment',
+    label: 'Attack & Run',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
       </svg>
     ),
-    active: false,
-    available: false,
-  },
-  {
-    id: 'observe',
-    label: 'Observe',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-      </svg>
-    ),
-    active: false,
-    available: false,
-  },
-  {
-    id: 'diagnose',
-    label: 'Diagnose',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="8" />
-        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-        <line x1="11" y1="8" x2="11" y2="14" />
-        <line x1="8" y1="11" x2="14" y2="11" />
-      </svg>
-    ),
-    active: false,
-    available: false,
-  },
-  {
-    id: 'improve',
-    label: 'Improve',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-        <polyline points="17 6 23 6 23 12" />
-      </svg>
-    ),
-    active: false,
-    available: false,
-  },
-  {
-    id: 'retest',
-    label: 'Re-test',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="1 4 1 10 7 10" />
-        <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
-      </svg>
-    ),
-    active: false,
-    available: false,
   },
 ]
 
-export default function Sidebar({ activePage, onNavigate }) {
+export default function Sidebar({ activePage, onNavigate, unlockedSteps }) {
+  const unlocked = unlockedSteps ?? new Set(['architecture'])
   return (
     <aside className={styles.sidebar}>
       {/* Brand */}
@@ -119,7 +67,7 @@ export default function Sidebar({ activePage, onNavigate }) {
         <span className={styles.navLabel}>Workflow</span>
         {NAV_ITEMS.map((item, index) => {
           const isActive = activePage === item.id
-          const isDisabled = !item.available
+          const isDisabled = !unlocked.has(item.id)
           return (
             <button
               key={item.id}
@@ -128,9 +76,9 @@ export default function Sidebar({ activePage, onNavigate }) {
                 isActive ? styles.navItemActive : '',
                 isDisabled ? styles.navItemDisabled : '',
               ].join(' ')}
-              onClick={() => item.available && onNavigate && onNavigate(item.id)}
+              onClick={() => !isDisabled && onNavigate && onNavigate(item.id)}
               disabled={isDisabled}
-              title={isDisabled ? 'Coming in a later step' : item.label}
+              title={isDisabled ? 'Register an architecture first' : item.label}
             >
               <span className={styles.navStep}>{index + 1}</span>
               <span className={styles.navIcon}>{item.icon}</span>
@@ -140,6 +88,25 @@ export default function Sidebar({ activePage, onNavigate }) {
           )
         })}
       </nav>
+
+      {/* Workflow stage legend */}
+      <div className={styles.stageLegend}>
+        <span className={styles.navLabel}>Stages</span>
+        {[
+          'Configure Attack',
+          'Run Experiment',
+          'Metrics',
+          'Diagnosis',
+          'Recommendations',
+          'Retest',
+          'Comparison',
+        ].map((s, i) => (
+          <div key={s} className={styles.stageItem}>
+            <span className={styles.stageNum}>{i + 1}</span>
+            <span className={styles.stageLabel}>{s}</span>
+          </div>
+        ))}
+      </div>
 
       {/* Footer */}
       <div className={styles.footer}>

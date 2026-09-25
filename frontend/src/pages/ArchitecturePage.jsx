@@ -12,6 +12,7 @@
 import { useState } from 'react'
 import ArchitectureCanvas from '../components/ArchitectureCanvas'
 import { registerArchitecture } from '../api/architecture'
+import { useExperiment } from '../store/experimentStore'
 import styles from './ArchitecturePage.module.css'
 
 // ── Fixed architecture definition (matches infrastructure/docker-compose.yml) ──
@@ -43,6 +44,8 @@ const STATUS_META = {
 // ── Component ───────────────────────────────────────────────────────────────
 
 export default function ArchitecturePage() {
+  const { setArchitectureId } = useExperiment()
+
   // Form state
   const [archName, setArchName] = useState('Order Processing System')
 
@@ -80,6 +83,7 @@ export default function ArchitecturePage() {
     try {
       const result = await registerArchitecture(payload)
       setSavedId(result.architecture_id)
+      setArchitectureId(result.architecture_id)
       setSuccessMsg(`Architecture registered successfully.`)
     } catch (err) {
       const detail =

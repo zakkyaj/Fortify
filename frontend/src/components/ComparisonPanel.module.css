@@ -1,0 +1,115 @@
+.wrapper { padding: 20px; }
+
+.head {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;
+}
+
+.stepNum {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent-dim); border: 1px solid var(--accent-border);
+  color: var(--accent); font-size: 10px; font-weight: 700; flex-shrink: 0;
+}
+
+.title { font-size: 13px; font-weight: 600; color: var(--text-h); margin: 0; flex: 1; }
+
+.simBadge {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--status-degraded); background: var(--status-degraded-bg);
+  border: 1px solid rgba(245,158,11,0.2); border-radius: 20px; padding: 2px 8px;
+}
+
+.stratBadge {
+  font-size: 10px; font-weight: 700; text-transform: capitalize;
+  color: var(--accent); background: var(--accent-dim);
+  border: 1px solid var(--accent-border); border-radius: 20px; padding: 2px 8px;
+}
+
+.empty {
+  font-size: 12px; color: var(--text-muted);
+  background: var(--bg-surface); border-radius: 6px; padding: 14px 16px;
+  border: 1px solid var(--border);
+}
+
+/* Table */
+.tableWrap { overflow-x: auto; margin-bottom: 16px; }
+
+.table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+}
+
+.th {
+  text-align: left; padding: 8px 12px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--text-muted);
+  background: var(--bg-surface); border-bottom: 1px solid var(--border);
+}
+
+.row { border-bottom: 1px solid var(--border-subtle); }
+.row:last-child { border-bottom: none; }
+
+.rowLabel {
+  padding: 10px 12px;
+  font-size: 12px; font-weight: 500; color: var(--text);
+}
+
+.rowBefore {
+  padding: 10px 12px;
+  font-size: 14px; font-weight: 600; color: var(--text-muted);
+  font-family: var(--mono);
+}
+
+.rowAfter {
+  padding: 10px 12px;
+  font-size: 14px; font-weight: 700; color: var(--text-h);
+  font-family: var(--mono);
+}
+
+.rowDelta {
+  padding: 10px 12px;
+}
+
+/* Delta chip */
+.delta {
+  font-size: 11px; font-weight: 700;
+  padding: 3px 8px; border-radius: 4px;
+  display: inline-block;
+}
+
+.deltaGood    { background: var(--status-healthy-bg);  color: var(--status-healthy);  }
+.deltaBad     { background: var(--status-failure-bg);  color: var(--status-failure);  }
+.deltaNeutral { background: var(--bg-surface);          color: var(--text-muted);      }
+
+/* Verdict banner */
+.verdict {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; padding: 12px 14px; border-radius: 6px;
+  margin-bottom: 14px;
+}
+
+.verdictGood {
+  background: var(--status-healthy-bg); color: var(--status-healthy);
+  border: 1px solid rgba(16,217,142,0.2);
+}
+
+.verdictBad {
+  background: var(--status-failure-bg); color: var(--status-failure);
+  border: 1px solid rgba(239,68,68,0.2);
+}
+
+/* IDs */
+.ids { display: flex; flex-direction: column; gap: 4px; }
+
+.idRow { display: flex; align-items: center; gap: 8px; }
+
+.idKey {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-muted); min-width: 110px;
+}
+
+.idVal {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--accent); background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  border-radius: 4px; padding: 2px 6px;
+}

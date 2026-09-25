@@ -1,30 +1,47 @@
 /**
  * App — top-level shell.
  *
- * Renders the sidebar and the active page.
- * Step 1 only has Architecture.
- * Additional pages will be wired in as they are built.
+ * Wraps everything in ExperimentProvider so all pages share experiment state.
+ * Sidebar unlocks "Attack & Run" once an architecture has been registered.
  */
 import { useState } from 'react'
 import Sidebar from './components/Sidebar'
 import ArchitecturePage from './pages/ArchitecturePage'
+import ExperimentPage from './pages/ExperimentPage'
+import { ExperimentProvider, useExperiment } from './store/experimentStore'
 import styles from './App.module.css'
 
-const PAGES = {
-  architecture: <ArchitecturePage />,
-}
-
-export default function App() {
+function Shell() {
   const [activePage, setActivePage] = useState('architecture')
+  const { architectureId } = useExperiment()
 
-  const currentPage = PAGES[activePage] ?? PAGES.architecture
+  // Unlock experiment page only once an architecture has been registered
+  const unlockedSteps = new Set(['architecture'])
+  if (architectureId) unlockedSteps.add('experiment')
+
+  const pages = {
+    architecture: <ArchitecturePage />,
+    experiment:   <ExperimentPage />,
+  }
 
   return (
     <div className={styles.shell}>
-      <Sidebar activePage={activePage} onNavigate={setActivePage} />
+      <Sidebar
+        activePage={activePage}
+        onNavigate={setActivePage}
+        unlockedSteps={unlockedSteps}
+      />
       <main className={styles.main}>
-        {currentPage}
+        {pages[activePage] ?? pages.architecture}
       </main>
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <ExperimentProvider>
+      <Shell />
+    </ExperimentProvider>
   )
 }

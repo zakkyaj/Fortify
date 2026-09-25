@@ -139,6 +139,32 @@
   flex-shrink: 0;
 }
 
+.stageLegend {
+  padding: 8px 8px 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.stageItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+}
+
+.stageNum {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 14px;
+  text-align: center;
+}
+
+.stageLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .footer {
   padding: 12px 16px;
   border-top: 1px solid var(--border);
