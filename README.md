@@ -10,7 +10,11 @@ Instead of discovering weaknesses after a production incident, FORTIFY lets engi
 
 # 🎥 FORTIFY DEMO
 
-fortify)_video_ final.mp4
+
+
+https://github.com/user-attachments/assets/6dd6f7e8-b853-4fa8-82e9-56b8f98599b3
+
+
 
 ---
 
