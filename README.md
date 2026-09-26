@@ -2,6 +2,15 @@
 
 > **AI-Powered Architecture Resilience & Failure Testing Platform**
 
+## 🎥 FORTIFY Demo
+
+<video src="./fortify)_video_final.mp4" controls width="100%">
+  Your browser does not support the video tag.
+</video>
+
+
+
+
 FORTIFY is a web-based platform for **designing, testing, and analyzing distributed system architectures under controlled failure conditions**.
 
 Instead of discovering weaknesses after a production incident, FORTIFY lets engineering teams **intentionally break parts of an architecture, observe how the system reacts, identify failure propagation and likely root causes, and use AI-assisted analysis to improve resilience**.
